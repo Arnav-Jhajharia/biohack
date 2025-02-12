@@ -1,11 +1,26 @@
-from rush import build_blocking_provider
-import os
+from gql import Client, gql
+from gql.transport.aiohttp import AIOHTTPTransport
+from rush.graphql_client import CreateRun
 
-API_TOKEN = os.getenv("BIOHACK_ACCESS_TOKEN")
-
-client = build_blocking_provider(access_token=API_TOKEN)
-
-benchmark = client.benchmark(name="OpenFF Protein-Ligand Binding Benchmark")
+# Define GraphQL endpoint
+GRAPHQL_ENDPOINT = "https://tengu.qdx.ai"
+MUTATION_QUERY="""
+    mutation run_benchmark($input: CreateRun!, $benchmark_id: BenchmarkId!, $sample_pct: Float, $with_outs: Boolean) {
+        run_benchmark(
+            input: $input
+            benchmark_id: $benchmark_id
+            sample: $sample_pct
+            with_outs: $with_outs
+        ) {
+            id
+            source_run {
+                id
+            }
+        }
+    }
+"""
+# GraphQL Mutation
+MUTATION_RUN_BENCHMARK = gql(MUTATION_QUERY)
 
 rex_code = r"""
 let
@@ -55,3 +70,30 @@ in
             id = save binding_affinity
         }]
 """
+# Function to execute GraphQL mutation
+async def benchmark_mutation(input_data, benchmark_id, sample_pct, with_outs, auth_token):
+    print(f"🚀 Running benchmark with ID: {benchmark_id}")
+
+    transport = AIOHTTPTransport(
+        url=GRAPHQL_ENDPOINT,
+        headers={"Authorization": f"Bearer {auth_token}"}
+    )
+
+    # Create GraphQL client
+    async with Client(transport=transport, fetch_schema_from_transport=True) as session:
+        try:
+            # Prepare mutation variables
+            variables = {
+                "input": input_data.dict(exclude_unset=True),
+                "benchmark_id": benchmark_id,
+                "sample_pct": sample_pct,
+                "with_outs": with_outs
+            }
+# 59dfc6a0-c77d-4373-9a39-b550110e89de
+            return await session.execute(MUTATION_RUN_BENCHMARK, variable_values=variables, operation_name="run_benchmark")
+
+        except Exception as e:
+            print(f"❌ Error: {e}")
+            return None
+
+

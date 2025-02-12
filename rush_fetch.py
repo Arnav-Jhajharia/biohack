@@ -2,7 +2,6 @@ import os
 from gql import Client, gql
 from gql.transport.aiohttp import AIOHTTPTransport
 
-API_TOKEN = os.getenv("BIOHACK_ACCESS_TOKEN")
 GRAPHQL_ENDPOINT = "https://tengu.qdx.ai"
 QUERY_DATA ="""
     query benchmark_submission($id: BenchmarkSubmissionId!, $project_id: ProjectId!) {
@@ -60,7 +59,7 @@ QUERY_DATA ="""
 QUERY_BENCHMARK_SUBMISSION = gql(QUERY_DATA)
 
 # Function to execute GraphQL query
-async def benchmark_submission(benchmark_id, project_id, auth_token=API_TOKEN):
+async def benchmark_submission(benchmark_id, project_id, auth_token):
     # Set up GraphQL transport with authentication
     transport = AIOHTTPTransport(
         url=GRAPHQL_ENDPOINT,
