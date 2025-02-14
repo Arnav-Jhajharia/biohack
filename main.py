@@ -35,18 +35,21 @@ in
 
 client = build_blocking_provider(access_token=API_TOKEN)
 benchmark = client.benchmark(name="OpenFF Protein-Ligand Binding Benchmark")
+
+# Ideally, we will want to define a bulk mutator and a bulk fetcher,
+# Both of these will do exactly what their name suggests
+# Intermediate controller will be some kind of traffic_controller that can try to
+# ensure that there is almost zero waste in time.
+# The only problem would be to decide what inputs to give bulk mutator, and that needs to be specifically studied under **kwargs
+# since it is relatively un-explored.
+
 async def main():
     input_ = CreateRun(rex=rex_fn,name="Benchmark Request pushed from Adi's Computer", project_id=client.project_id)
-    response = await benchmark_mutation(input_,benchmark.id,0.02,False,API_TOKEN)
-    # the actual ID is set under response.run_benchmark.id
-    run_benchmark_id = response['run_benchmark']['id']
-    # Complepte automation has been achieved once we can use a Q to store the ids sequentially and then
-    # via a reliever, get the benchmark_submission stats.
-    # However, the most difficult thing to do right now is to understand the Rust code ig? I dont know, there must be
-    # someway in which we can decipher which parts to keep and not to keep. Like are all modules required?
-    # Lets see.i
-    # response = await benchmark_submission("b11071e7-4662-4a0f-8579-815febd1f514", "0d2723d5-674e-430c-90be-7784d068247f", auth_token=API_TOKEN)
-    # print(json.dumps(response, indent=1))  # Print the API response
+    # response = await benchmark_mutation(input_,benchmark.id,0.02,False,API_TOKEN)
+    # run_benchmark_id = response['run_benchmark']['id']
+
+    # response = await benchmark_submission(run_benchmark_id, client.project_id, auth_token=API_TOKEN)
+    # print(json.dumps(response.data, indent=1))  # Print the API response
 
 
 if __name__ == "__main__":

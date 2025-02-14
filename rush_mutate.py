@@ -90,7 +90,7 @@ async def benchmark_mutation(input_data, benchmark_id, sample_pct, with_outs, au
                 "with_outs": with_outs
             }
 # 59dfc6a0-c77d-4373-9a39-b550110e89de
-            return await session.execute(MUTATION_RUN_BENCHMARK, variable_values=variables, operation_name="run_benchmark")
+            return await session.execute(MUTATION_RUN_BENCHMARK, variable_values=variables, operation_name="run_benchmark", serialize_variables=True, get_execution_result=True)
 
         except Exception as e:
             print(f"❌ Error: {e}")
