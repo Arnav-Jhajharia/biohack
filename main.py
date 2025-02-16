@@ -47,8 +47,6 @@ in
 client = build_blocking_provider(access_token=API_TOKEN)
 benchmark = client.benchmark(name="OpenFF Protein-Ligand Binding Benchmark")
 
-
-
 async def benchmark_workflow(rex, name, sample_pct, with_outs, wait_for_result=True):
     """
     Initiates a simple benchmark workflow for the Rush API.
@@ -77,5 +75,87 @@ async def main():
     res = await benchmark_workflow(rex=rex_fn, name="Benchmark Workflow Submission from Adi's Computer", sample_pct=0.01, with_outs=False)
     print(json.dumps(res, indent=1))
 
+options={
+    "auto3d": {
+    "k": {
+        "type": "int",
+        "default": None,
+        "description": "Output top k structures for each molecule.",
+        "bounds": (1, None)  # Must be at least 1 if provided
+    },
+    "window": {
+        "type": "float",
+        "default": None,
+        "description": "Outputs structures whose energies are within X kcal/mol from the lowest energy conformer.",
+        "bounds": (0, None)  # Should be non-negative
+    },
+    "max_confs": {
+        "type": "int",
+        "default": None,
+        "description": "Maximum number of isomers per SMILES. Defaults to (heavy_atoms - 1).",
+        "bounds": (1, None)  # At least 1 isomer
+    },
+    "enumerate_tautomer": {
+        "type": "bool",
+        "default": False,
+        "description": "When true, enumerates tautomers for the input."
+    },
+    "enumerate_isomer": {
+        "type": "bool",
+        "default": True,
+        "description": "When true, cis/trans and R/S isomers are enumerated."
+    },
+    "optimizing_engine": {
+        "type": "str",
+        "default": "AIMNET",
+        "description": "The engine used for optimization.",
+        "choices": ["ANI2x", "ANI2xt", "AIMNET"]
+    },
+    "opt_steps": {
+        "type": "int",
+        "default": 5000,
+        "description": "Maximum number of optimization steps.",
+        "bounds": (1, None)  # Should be at least 1
+    },
+    "convergence_threshold": {
+        "type": "float",
+        "default": 0.003,
+        "description": "Optimization is considered converged if maximum force is below this threshold.",
+        "bounds": (0, None)  # Must be non-negative
+    },
+    "patience": {
+        "type": "int",
+        "default": 1000,
+        "description": "If force does not decrease for patience steps, conformer drops out of optimization loop.",
+        "bounds": (1, None)  # Must be at least 1
+    },
+    "threshold": {
+        "type": "float",
+        "default": 0.3,
+        "description": "If RMSD between two conformers is within this threshold, one is removed as a duplicate.",
+        "bounds": (0, None)  # Must be non-negative
+    },
+    "verbose": {
+        "type": "bool",
+        "default": False,
+        "description": "When true, saves all metadata while running."
+    },
+    "capacity": {
+        "type": "int",
+        "default": 40,
+        "description": "Number of SMILES the model handles per 1GB of memory.",
+        "bounds": (1, None)  # At least 1
+    },
+    "batchsize_atoms": {
+        "type": "int",
+        "default": 1024,
+        "description": "Number of atoms in one optimization batch per 1GB memory.",
+        "bounds": (1, None)  # At least 1
+    }
+}
+
+
 if __name__ == "__main__":
     asyncio.run(main())
+
+
