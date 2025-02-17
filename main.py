@@ -2,21 +2,29 @@ import asyncio
 import json
 import os
 
-
+from openai import OpenAI
 from rush import build_blocking_provider
 from rush.graphql_client import CreateRun
 
-from PythonProject.rush_fetch import benchmark_submission
-from rush_mutate import benchmark_mutation
+from rush_api_interactions.rush_fetch import benchmark_submission
+from rush_api_interactions.rush_mutate import benchmark_mutation
 
-API_TOKEN = os.getenv("BIOHACK_ACCESS_TOKEN")
-
+RUSH_API_TOKEN = os.getenv("BIOHACK_ACCESS_TOKEN")
+DS_API_TOKEN = os.getenv("DS_API_TOKEN")
 rex_fn = r"""
 let
-    auto3d = \smi -> map to_data (get 0 (auto3d_rex_s default_runspec_gpu { k = 1 } [smi])),
+    cust_runspec =RunSpec{ 
+        target = 'Bullet', 
+        resources = Resources{
+            storage = some 10, 
+            storage_units = some "MB", 
+            gpus = some 1
+        }
+    },
+    auto3d = \smi -> map to_data (get 0 (auto3d_rex_s cust_runspec { k = 5, optimizing_engine= "ANI2xt", window=2.5 } [smi])),
     p2rank = \prot_conf -> p2rank_rex_s default_runspec {} prot_conf,
     gnina = \prot_conf -> \bounding_box -> \smol_conf ->
-        get 0 (get 0 (gnina_rex_s default_runspec_gpu {} [prot_conf] [bounding_box] smol_conf []))
+        get 0 (get 0 (gnina_rex_s default_runspec_gpu {exhaustiveness=16  , run_modes=10, minimize=true} [prot_conf] [bounding_box] smol_conf []))
 in
     \input ->
         let
@@ -44,8 +52,8 @@ in
             [BenchmarkArg { entity = "BindingAffinity", id = save binding_affinity }]
 """
 
-client = build_blocking_provider(access_token=API_TOKEN)
-benchmark = client.benchmark(name="OpenFF Protein-Ligand Binding Benchmark")
+rush_client = build_blocking_provider(access_token=RUSH_API_TOKEN)
+benchmark = rush_client.benchmark(name="OpenFF Protein-Ligand Binding Benchmark")
 
 async def benchmark_workflow(rex, name, sample_pct, with_outs, wait_for_result=True):
     """
@@ -60,99 +68,35 @@ async def benchmark_workflow(rex, name, sample_pct, with_outs, wait_for_result=T
     """
 
 
-    input_ = CreateRun(rex=rex, name=name, project_id = client.project_id)
+    input_ = CreateRun(rex=rex, name=name, project_id = rush_client.project_id)
     print("✅ Requesting to run Benchmark")
-    response = await benchmark_mutation(input_, benchmark.id, sample_pct=sample_pct, with_outs=with_outs, auth_token= API_TOKEN)
-    print(f"🚀 Running benchmark with submission ID: {response.data['run_benchmark']['id']} \t source submission ID: {response.data['run_benchmark']['source_run']['id']}")
-    if wait_for_result :
-        res = (client.poll_run_blocking(response.data['run_benchmark']['source_run']['id'])).status
-        if res == "DONE":
-            return await benchmark_submission(response.data['run_benchmark']['id'], client.project_id, API_TOKEN)
-    else:
-        return response.data
+    response = await benchmark_mutation(input_, benchmark.id, sample_pct=sample_pct, with_outs=with_outs, auth_token= RUSH_API_TOKEN)
+    if response is not None :
+        print(f"🚀 Running benchmark with submission ID: {response.data['run_benchmark']['id']} \t source submission ID: {response.data['run_benchmark']['source_run']['id']}")
+        if wait_for_result :
+            res = (rush_client.poll_run_blocking(response.data['run_benchmark']['source_run']['id'])).status
+            if res == "DONE":
+                return await benchmark_submission(response.data['run_benchmark']['id'], rush_client.project_id, RUSH_API_TOKEN)
+        else:
+            return response.data
+    else :
+        return response
 
+
+deepseek_client = OpenAI(api_key=DS_API_TOKEN, base_url="https://api.deepseek.com")
 async def main():
-    res = await benchmark_workflow(rex=rex_fn, name="Benchmark Workflow Submission from Adi's Computer", sample_pct=0.01, with_outs=False)
-    print(json.dumps(res, indent=1))
+    response = deepseek_client.chat.completions.create(
+        model="deepseek-chat",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant"},
+            {"role": "user", "content": "Hello"},
+        ],
+        stream=False
+    )
+    print(response.choices[0].message.content)
+    # res = await benchmark_workflow(rex=rex_fn, name="Benchmark Workflow training #1", sample_pct=0.02, with_outs=False)
+    # print(json.dumps(res, indent=1))
 
-options={
-    "auto3d": {
-    "k": {
-        "type": "int",
-        "default": None,
-        "description": "Output top k structures for each molecule.",
-        "bounds": (1, None)  # Must be at least 1 if provided
-    },
-    "window": {
-        "type": "float",
-        "default": None,
-        "description": "Outputs structures whose energies are within X kcal/mol from the lowest energy conformer.",
-        "bounds": (0, None)  # Should be non-negative
-    },
-    "max_confs": {
-        "type": "int",
-        "default": None,
-        "description": "Maximum number of isomers per SMILES. Defaults to (heavy_atoms - 1).",
-        "bounds": (1, None)  # At least 1 isomer
-    },
-    "enumerate_tautomer": {
-        "type": "bool",
-        "default": False,
-        "description": "When true, enumerates tautomers for the input."
-    },
-    "enumerate_isomer": {
-        "type": "bool",
-        "default": True,
-        "description": "When true, cis/trans and R/S isomers are enumerated."
-    },
-    "optimizing_engine": {
-        "type": "str",
-        "default": "AIMNET",
-        "description": "The engine used for optimization.",
-        "choices": ["ANI2x", "ANI2xt", "AIMNET"]
-    },
-    "opt_steps": {
-        "type": "int",
-        "default": 5000,
-        "description": "Maximum number of optimization steps.",
-        "bounds": (1, None)  # Should be at least 1
-    },
-    "convergence_threshold": {
-        "type": "float",
-        "default": 0.003,
-        "description": "Optimization is considered converged if maximum force is below this threshold.",
-        "bounds": (0, None)  # Must be non-negative
-    },
-    "patience": {
-        "type": "int",
-        "default": 1000,
-        "description": "If force does not decrease for patience steps, conformer drops out of optimization loop.",
-        "bounds": (1, None)  # Must be at least 1
-    },
-    "threshold": {
-        "type": "float",
-        "default": 0.3,
-        "description": "If RMSD between two conformers is within this threshold, one is removed as a duplicate.",
-        "bounds": (0, None)  # Must be non-negative
-    },
-    "verbose": {
-        "type": "bool",
-        "default": False,
-        "description": "When true, saves all metadata while running."
-    },
-    "capacity": {
-        "type": "int",
-        "default": 40,
-        "description": "Number of SMILES the model handles per 1GB of memory.",
-        "bounds": (1, None)  # At least 1
-    },
-    "batchsize_atoms": {
-        "type": "int",
-        "default": 1024,
-        "description": "Number of atoms in one optimization batch per 1GB memory.",
-        "bounds": (1, None)  # At least 1
-    }
-}
 
 
 if __name__ == "__main__":
